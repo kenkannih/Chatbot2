@@ -1,12 +1,3 @@
-# Copyright (C) 2020-2021 by kenkansaja@Github, < https://github.com/kenkansaja >.
-#
-# This file is part of < https://github.com/kenkansaja/Chatbot2 > project,
-# and is released under the "GNU v3.0 License Agreement".
-# Please see < https://github.com/kenkansaja/Chatbot2/blob/master/LICENSE >
-# https://t.me/pySmartDL
-#
-# All rights reserved.
-
 import telebot
 from telebot import types
 from database import *
@@ -16,21 +7,16 @@ import pytz
 from datetime import datetime
 from config import GROUP, OWNER, CHANNEL, TOKEN
 
-
 bot = telebot.TeleBot(f'{TOKEN}')
-
 
 class User:  
     def __init__(self, user_id):
         self.user_id = user_id
-        self.name = None
-        self.age = None
         self.sex = None
         self.change = None
-
+        self.state = None
 
 user_dict = {}  
-
 @bot.message_handler(commands=['start'])
 def welcome(message):
     if check_user(user_id=message.from_user.id)[0]:
@@ -38,107 +24,122 @@ def welcome(message):
         mark.add('🔍 Find a Partner')
         mark.add('📰 Profile Info', '🗑 Delete Profile')
         me = bot.get_me()
-        bot.send_message(message.from_user.id, f"*Welcome to {me.first_name}🙊*\n\n_Hope you find a friend or partner_\n\n*NOTE:*\nMUST JOIN\n[👥 GROUP](t.me/{GROUP}) | [CHANNEL 📣](t.me/{CHANNEL}) | [📱OWNER](t.me/{OWNER})",parse_mode="markdown",disable_web_page_preview=True, reply_markup=mark)
+        bot.send_message(message.from_user.id, f"*Welcome to {me.first_name}🙊*\n\n_Hope you find a friend or partner_\n\n*NOTE:*\nMUST JOIN\n[👥 GROUP](t.me/{GROUP}) | [CHANNEL 📣](t.me/{CHANNEL}) | [📱OWNER](t.me/{OWNER})", parse_mode="markdown", disable_web_page_preview=True, reply_markup=mark)
         bot.register_next_step_handler(message, search_prof)
     else:
-        bot.send_message(message.from_user.id, "_👋Hello New User, To Proceed Please Fill in the Following Bio!_",parse_mode="markdown")
-        bot.send_message(message.from_user.id, "➡️ *Your Name: *", parse_mode="markdown")
-        bot.register_next_step_handler(message, reg_name)
+        # Create a new User object and store it in user_dict
+        user = User(message.from_user.id)
+        user_dict[message.from_user.id] = user
+
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        markup.add(types.KeyboardButton('Male👦'), types.KeyboardButton('Female👩🏻'))
+
+        bot.send_message(message.from_user.id, "_👋Hello New User, To Proceed Please Select Your Gender!_", parse_mode="markdown", reply_markup=markup)
+        bot.register_next_step_handler(message, handle_gender_selection)
+
+def handle_gender_selection(message):
+    try:
+        user = user_dict[message.from_user.id]
+        if message.text in ['Male👦', 'Female👩🏻']:
+            user.sex = message.text
+            # Prompt for partner preference
+            markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+            markup.add('Male👦', 'Female👩🏻', 'Both👀')
+            bot.send_message(message.from_user.id, "*What gender are you looking for?*", parse_mode="markdown", reply_markup=markup)
+            bot.register_next_step_handler(message, reg_change)
+        else:
+            bot.send_message(message.from_user.id, '_Please Click the Options on the Keyboard!_', parse_mode="markdown")
+            bot.register_next_step_handler(message, handle_gender_selection)
+    except KeyError:
+        bot.send_message(message.from_user.id, "An error occurred. Please restart by typing /start.")
+
 
 @bot.message_handler(content_types=['text'])
 def text_reac(message):  
     bot.send_message(message.chat.id, 'An error occurred\nPlease click /start to try again')
 
-def reg_name(message):  
-    if message.text != '':
-        user = User(message.from_user.id)
-        user_dict[message.from_user.id] = user
-        user.name = message.text
-        bot.send_message(message.from_user.id, "*Age: *", parse_mode="markdown")
-        bot.register_next_step_handler(message, reg_age)
-
-    else:
-        bot.send_message(message.from_user.id, "*Please Enter Your Name: *", parse_mode="markdown")
-        bot.register_next_step_handler(message, reg_name)
-
-
-def reg_age(message):  
-    age = message.text
-    if not age.isdigit():
-        msg = bot.reply_to(message, '_Use numbers, not letters!_', parse_mode="markdown")
-        bot.register_next_step_handler(msg, reg_age)
-        return
-    user = user_dict[message.from_user.id]
-    user.age = age
-    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.add('Male👦', 'Female👩🏻')
-    bot.send_message(message.from_user.id, '*Gender: *',parse_mode="markdown", reply_markup=markup)
-    bot.register_next_step_handler(message, reg_sex)
-
-
 def reg_sex(message):  
     sex = message.text
-    user = user_dict[message.from_user.id]
-    if (sex == 'Male👦') or (sex == 'Female👩🏻'):
-        user.sex = sex
-        mark = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        mark.add('Male👦', 'Female👩🏻', 'Both👀')
-        bot.send_message(message.from_user.id, '*⏳You want to find a partner: *',parse_mode="markdown", reply_markup=mark)
-        bot.register_next_step_handler(message, reg_change)
+    user = User(message.from_user.id)
+    user_dict[message.from_user.id] = user
+    
+    # Creating a keyboard markup for gender selection
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add(types.KeyboardButton('Male👦'), types.KeyboardButton('Female👩🏻'))
+    
+    # Prompt the user to select their gender
+    bot.send_message(message.from_user.id, '*Please select your gender:*', parse_mode="markdown", reply_markup=markup)
+    bot.register_next_step_handler(message, handle_gender_selection)
 
-    else:
-        bot.send_message(message.from_user.id, '_Please Click the Options on the Keyboard!_',parse_mode="markdown")
-        bot.register_next_step_handler(message, reg_sex)
 
 
 def reg_change(message):  
-    if (message.text == 'Male👦') or (message.text == 'Female👩🏻') or (message.text == 'Both👀'):
+    if message.text in ['Male👦', 'Female👩🏻', 'Both👀']:
         user = user_dict[message.from_user.id]
         user.change = message.text
-        date1 = datetime.fromtimestamp(message.date, tz=pytz.timezone("asia/jakarta")).strftime("%d/%m/%Y %H:%M:%S").split()
-        bot.send_message(message.from_user.id,
-                         "🐱 - _YOUR BIO_ - 🐱\n\n*=> Name: * " + str(user.name) + "\n*=> Age: * " + str(user.age)+" Years" + "\n*=> Gender: * " + str(user.sex) + "\n*=> Partner Preference: * " + str(user.change)+ "\n*=> Registered On: \n        >Date: * "+str(date1[0])+"\n    *    >Time: * "+str(date1[1])+" WIB", parse_mode="markdown")
-        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        markup.add('Yes ✔️', 'No ✖️')
-        bot.send_message(message.from_user.id, "`Do you want to change the above data?`",parse_mode="markdown", reply_markup=markup)
-        bot.register_next_step_handler(message, reg_accept)
+        bot.send_message(message.from_user.id, "Great! Now, please select your state.")
+        reg_state(message)  # Directly call reg_state to ask for the state after the gender preference
     else:
         bot.send_message(message.from_user.id, 'Please Click the Options on the Keyboard')
         bot.register_next_step_handler(message, reg_change)
 
 
+
+def reg_state(message):  
+    states = ['New South Wales', 'Victoria', 'Queensland', 'Western Australia', 'South Australia', 'Tasmania', 'Northern Territory', 'Australian Capital Territory']
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    for state in states:
+        markup.add(state)
+    bot.send_message(message.from_user.id, '*Please select your state:*', parse_mode="markdown", reply_markup=markup)
+    bot.register_next_step_handler(message, save_state)
+
+
+
+def save_state(message):
+    user = user_dict[message.from_user.id]
+    user.state = message.text
+    # Save the user information to the database
+    reg_db(user_id=user.user_id, gender=user.sex, change=user.change, state=user.state)
+    bot.send_message(message.from_user.id, "_Success...✅\nYour Account Has Been Registered!_", parse_mode="markdown")
+    welcome(message)
+
+
+
+
 def reg_accept(message):  
-    if (message.text == 'Yes ✔️') or (message.text == 'No ✖️'):
-        if message.text == 'Yes ✔️':
-            tw = types.ReplyKeyboardRemove()
-            bot.send_message(message.from_user.id, "*Enter Again🕹\nYour Name: *", parse_mode="markdown", reply_markup=tw)
-            bot.register_next_step_handler(message, reg_name)
-        else:
-            if not check_user(user_id=message.from_user.id)[0]:
-                user = user_dict[message.from_user.id]
-                reg_db(user_id=user.user_id, name=user.name, old=user.age, gender=user.sex, change=user.change)
-                bot.send_message(message.from_user.id, "_Success...✅\nYour Account Has Been Registered!_", parse_mode="markdown")
-            else:
-                if message.from_user.id in user_dict.keys():
-                    user = user_dict[message.from_user.id]
-                    edit_db(user_id=user.user_id, name=user.name, old=user.age, gender=user.sex, change=user.change)
-            welcome(message)
+    if message.text == 'Yes ✔️':
+        # If the user wants to change their profile, restart the registration
+        bot.send_message(message.from_user.id, "*Let's update your profile. Please select your gender.*", parse_mode="markdown")
+        bot.register_next_step_handler(message, handle_gender_selection)
+    elif message.text == 'No ✖️':
+        bot.send_message(message.from_user.id, "Alright, your profile remains unchanged.")
+        welcome(message)
+    else:
+        bot.send_message(message.from_user.id, 'Please select an option from the keyboard.')
+        bot.register_next_step_handler(message, reg_accept)
 
 
 def search_prof(message):  
-    if (message.text == u'🔍 Find a Partner') or (message.text == u'📰 Profile Info') or (
-            message.text == u'🗑 Delete Profile'):
-        if message.text == u'🔍 Find a Partner':
+    if message.text in ['🔍 Find a Partner', '📰 Profile Info', '🗑 Delete Profile']:
+        if message.text == '🔍 Find a Partner':
             bot.send_message(message.from_user.id, '🚀 Looking for a partner for you . . .')
             search_partner(message)
-        elif message.text == u'📰 Profile Info':
+        elif message.text == '📰 Profile Info':
             user_info = get_info(user_id=message.from_user.id)
+            
+            # Ensure the correct data is mapped
+            user_id = user_info[1]
+            gender = user_info[2] if user_info[2] else 'Not Set'
+            partner_preference = user_info[3] if user_info[3] else 'Not Set'
+            state = user_info[4] if user_info[4] else 'Not Set'
+            
             bot.send_message(message.from_user.id,
-                             "📍Profile Data📍\n\n*Name: * " + str(user_info[2]) +"\n*ID: * `"+str(message.from_user.id)+"`" +"\n*Age: * " + str(
-                                 user_info[3]) +" Years" + "\n*Gender: * " + str(user_info[4]) + "\n*Partner Preference: * " + str(user_info[5]),parse_mode="markdown")
+                             f"📍Profile Data📍\n\n*ID: * `{user_id}`\n*Gender: * {gender}\n*Partner Preference: * {partner_preference}\n*State: * {state}",
+                             parse_mode="markdown")
+                             
             mark = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             mark.add('Yes ✔️', 'No ✖️')
-            bot.send_message(message.from_user.id, '_Do You Want to Change Your Profile Data?_',parse_mode="markdown", reply_markup=mark)
+            bot.send_message(message.from_user.id, '_Do You Want to Change Your Profile Data?_', parse_mode="markdown", reply_markup=mark)
             bot.register_next_step_handler(message, reg_accept)
         else:
             delete_user(user_id=message.from_user.id)
@@ -151,33 +152,30 @@ def search_prof(message):
         bot.register_next_step_handler(message, search_prof)
 
 
+
+
 def search_partner(message): 
+    user_info = get_info(user_id=message.from_user.id)
+    user_state = user_info[5]  # Assuming the state is the 6th item returned by get_info
+    select = select_free_by_state(user_state)
     is_open = check_open(first_id=message.from_user.id)
     if is_open[0][0]:  
         bot.register_next_step_handler(message, chat)
-
     else:
-        select = select_free()
         success = False
         if not select:
             add_user(first_id=message.from_user.id)
         else:
             for sel in select:
                 if check_status(first_id=message.from_user.id, second_id=sel[0]) or message.from_user.id == sel[0]:
-                    print(message.from_user.id, 'Joined')
                     continue
-
                 else:
-                    print(sel[0])
-                    print(message.from_user.id)
                     mark2 = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
                     mark2.add('❌ Exit')
                     add_second_user(first_id=sel[0], second_id=message.from_user.id)
-                    user_info = get_info(user_id=sel[0])
                     bot.send_message(message.from_user.id,
                           "⚠️*Partner Found*", parse_mode="markdown",
                           reply_markup=mark2)
-                    user_info = get_info(user_id=message.from_user.id)
                     bot.send_message(sel[0],
                           "⚠️*Partner Found*", parse_mode="markdown",
                           reply_markup=mark2)
@@ -262,5 +260,8 @@ def chat(message):
 
            
 
-print("BOT IS READY")
-bot.polling()
+if __name__ == '__main__':
+    init_db()  # Initialize the database
+    init_queue()  # Initialize the queue table
+    print("BOT IS READY")
+    bot.polling()
