@@ -1,35 +1,18 @@
-# Copyright (C) 2020-2021 by kenkansaja@Github, < https://github.com/kenkansaja >.
-#
-# This file is part of < https://github.com/kenkansaja/Chatbot2 > project,
-# and is released under the "GNU v3.0 License Agreement".
-# Please see < https://github.com/kenkansaja/Chatbot2/blob/master/LICENSE >
-# https://t.me/pySmartDL
-#
-# All rights reserved.
+
 
 import sqlite3
 
 
 def ensure_connections(func):
-    """ Dekorator untuk koneksi ke DBMS: membuka koneksi, mengeksekusi fungsi yang diteruskan dan menutup koneksi setelah dirinya sendiri.
-        Sambungan aman!
-        """
-
     def inner(*args, **kwargs):
         with sqlite3.connect('users.db') as conn:
             res = func(*args, conn=conn, **kwargs)
         return res
-
     return inner
 
 
 @ensure_connections
 def init_db(conn, force: bool = False):
-    """ Periksa apakah tabel ada, jika tidak buat ulang
-
-           :param conn: terhubung ke DBMS
-           :param force: secara eksplisit membuat ulang semua tabel
-       """
     c = conn.cursor()
     if force:
         c.execute('DROP TABLE IF EXISTS users')
@@ -37,31 +20,36 @@ def init_db(conn, force: bool = False):
         CREATE TABLE IF NOT EXISTS users (
             id           INTEGER PRIMARY KEY,
             user_id      INTEGER NOT NULL,
-            name         STRING,
-            old          INTEGER,
             gender       STRING,
-            change     STRING NOT NULL
+            change       STRING NOT NULL,
+            state        STRING   -- New column for state
         )
     ''')
-    # Сохранить изменения
     conn.commit()
 
 
 @ensure_connections
-def reg_db(conn, user_id: int, name: str, old: int, gender: str,
-           change: str):  # Добавление пользователя в таблицу users
+def reg_db(conn, user_id: int, gender: str, change: str, state: str):
     c = conn.cursor()
-    c.execute('INSERT INTO users (user_id, name, old, gender, change) VALUES (?,?,?,?,?)',
-              (user_id, name, old, gender, change))
+    c.execute('INSERT INTO users (user_id, gender, change, state) VALUES (?,?,?,?)',
+              (user_id, gender, change, state))
     conn.commit()
+
 
 
 @ensure_connections
-def edit_db(conn, user_id: int, name: str, old: int, gender: str,
-            change: str):  # Пересоздание пользователя по user_id в таблицу users
+def edit_db(conn, user_id: int, name: str, old: int, gender: str, change: str, state: str):
     c = conn.cursor()
-    c.execute('UPDATE users SET name=?,old=?,gender=?,change=? WHERE user_id = ?', (name, old, gender, change, user_id))
+    c.execute('UPDATE users SET name=?,old=?,gender=?,change=?,state=? WHERE user_id = ?', 
+              (name, old, gender, change, state, user_id))
     conn.commit()
+
+@ensure_connections
+def select_free_by_state(state: str):
+    c = conn.cursor()
+    c.execute('SELECT first_id FROM queue q JOIN users u ON q.first_id = u.user_id WHERE u.state = ? AND (q.second_id IS NULL or q.second_id = "")', (state,))
+    return c.fetchall()
+
 
 
 @ensure_connections
